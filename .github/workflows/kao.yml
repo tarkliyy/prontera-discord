@@ -1,0 +1,53 @@
+name: kao
+
+on:
+  schedule:
+    - cron: '2-59/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kao
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: luang state
+        run: |
+          code=0
+          git ls-remote --exit-code --heads origin state > /dev/null || code=$?
+          if [ "$code" = 2 ]; then echo '{}' > state.json
+          elif [ "$code" = 0 ]; then git fetch --depth=1 origin state && git show FETCH_HEAD:state.json > state.json
+          else exit 1
+          fi
+      - run: node kao.mjs
+        env:
+          WEBHOOK_KHAO: ${{ secrets.WEBHOOK_KHAO }}
+          WEBHOOK_THONG: ${{ secrets.WEBHOOK_THONG }}
+          WEBHOOK_DUAN: ${{ secrets.WEBHOOK_DUAN }}
+          BLS_KEY: ${{ secrets.BLS_KEY }}
+      - name: gep state
+        if: always()
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('state.json','utf8'))" || exit 0
+          blob=$(git hash-object -w state.json)
+          [ "$blob" = "$(git rev-parse -q --verify FETCH_HEAD:state.json || true)" ] && exit 0
+          tree=$(printf '100644 blob %s\tstate.json\n' "$blob" | git mktree)
+          commit=$(git -c user.name=kao-bot -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit-tree "$tree" -m state)
+          git push -f origin "${commit}:refs/heads/state"
+      - name: kan lab
+        if: always()
+        run: |
+          [ $(( $(date +%s) - $(git log -1 --format=%ct HEAD) )) -lt 2592000 ] && exit 0
+          git -c user.name=kao-bot -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit --allow-empty -m "kan lab"
+          git push || true

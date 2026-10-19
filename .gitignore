@@ -1,0 +1,8 @@
+config.local.mjs
+state.test.json
+state.json
+node_modules/
+line.json
+sik.log
+qr.png
+.DS_Store
