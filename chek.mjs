@@ -59,9 +59,15 @@ const dib = (khai) => ({
   response: { update_date: '15/10/2569', update_time: 'เวลา 16:22 น. (ครั้งที่ 18)', price: { gold: { buy: '64,430.00', sell: '66,750.00' }, gold_bar: { buy: '65,750.00', sell: khai } } },
 })
 const kao = anthong(dib('65,950.00'))
-assert.match(embedthong(anthong(dib('66,050.00')), kao).title, /ขึ้น 100/)
-assert.match(embedthong(anthong(dib('65,900.00')), kao).title, /ลง 50/)
-assert.match(embedthong(kao, undefined).title, /ล่าสุด/)
+assert.match(embedthong(anthong(dib('66,050.00')), kao).title, /ขึ้น 100 บาท ▲/)
+assert.match(embedthong(anthong(dib('65,900.00')), kao).title, /ลง 50 บาท ▼/)
+assert.equal(embedthong(kao, undefined).title, 'ราคาทองวันนี้')
+assert.match(embedthong(kao, kao).title, /เท่าเดิม/)
+const wankon = { ...kao, rob: '14/10/2569 เวลา 17:00 น. (ครั้งที่ 9)', baengKhai: 65800 }
+assert.equal(embedthong(anthong(dib('66,050.00')), kao, wankon).description, 'รวมทั้งวัน ขึ้น 250 บาท ▲')
+assert.equal(embedthong(kao, wankon, wankon).description, undefined)
+assert.match(embedthong(kao, kao).fields[1].value, /\*\*64,430\*\*/)
+assert.match(embedthong({ ...kao, rupSue: 64733.2 }, kao).fields[1].value, /64,733\.20/)
 assert.throws(() => anthong(dib('')))
 assert.throws(() => anthong({ status: 'error' }))
 

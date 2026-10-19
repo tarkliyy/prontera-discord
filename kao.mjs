@@ -64,7 +64,7 @@ const sendka = async (hook, embed) => {
 export const wanthai = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(ms)
 export const mongthai = (ms) => Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(ms))
 export const tad = (s) => Number(String(s).replaceAll(',', ''))
-const ngern = (n) => n.toLocaleString('en-US')
+const ngern = (n) => n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })
 const unix = (ms) => Math.floor(ms / 1000)
 
 export const kadkhao = (puang) =>
@@ -522,16 +522,20 @@ export const anthong = (d) => {
   return raka
 }
 
-export const embedthong = (raka, kao) => {
+const wanrob = (raka) => raka.rob.split(' ')[0]
+const bokTang = (tang) => (tang > 0 ? `ขึ้น ${ngern(tang)} บาท ▲` : tang < 0 ? `ลง ${ngern(-tang)} บาท ▼` : 'เท่าเดิม')
+
+export const embedthong = (raka, kao, wankon) => {
   const tang = kao ? raka.baengKhai - kao.baengKhai : 0
-  const lukson = tang > 0 ? `ขึ้น ${ngern(tang)} บาท 🔺` : tang < 0 ? `ลง ${ngern(-tang)} บาท 🔻` : kao ? 'ราคาเท่าเดิม' : 'ราคาล่าสุด'
+  const tangwan = wankon && kao && wanrob(kao) === wanrob(raka) ? raka.baengKhai - wankon.baengKhai : null
   return {
-    title: `🇹🇭 ทองไทยปรับราคา · ${lukson}`,
+    title: kao ? `ราคาทอง${bokTang(tang)}` : 'ราคาทองวันนี้',
     url: 'https://www.goldtraders.or.th/',
+    description: tangwan == null ? undefined : `รวมทั้งวัน ${bokTang(tangwan)}`,
     color: tang > 0 ? config.si.khuen : tang < 0 ? config.si.long : config.si.thong,
     fields: [
       { name: 'ทองแท่ง 96.5%', value: `รับซื้อ **${ngern(raka.baengSue)}**\nขายออก **${ngern(raka.baengKhai)}**`, inline: true },
-      { name: 'ทองรูปพรรณ', value: `รับซื้อ **${ngern(raka.rupSue)}**\nขายออก **${ngern(raka.rupKhai)}**`, inline: true },
+      { name: 'ทองรูปพรรณ 96.5%', value: `รับซื้อ **${ngern(raka.rupSue)}**\nขายออก **${ngern(raka.rupKhai)}**`, inline: true },
     ],
     footer: { text: `${raka.rob.replace('เวลา ', '')} · สมาคมค้าทองคำ` },
   }
@@ -540,7 +544,8 @@ export const embedthong = (raka, kao) => {
 const duthong = async (state, hook) => {
   const raka = anthong(await dujson(THONG_URL))
   if (state.thong?.rob === raka.rob) return
-  await sendka(hook, embedthong(raka, state.thong))
+  if (state.thong && wanrob(state.thong) !== wanrob(raka)) state.thongWankon = state.thong
+  await sendka(hook, embedthong(raka, state.thong, state.thongWankon))
   state.thong = raka
 }
 
