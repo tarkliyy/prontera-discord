@@ -523,7 +523,7 @@ export const anthong = (d) => {
 }
 
 const wanrob = (raka) => raka.rob.split(' ')[0]
-const bokTang = (tang) => (tang > 0 ? `ขึ้น ${ngern(tang)} บาท ▲` : tang < 0 ? `ลง ${ngern(-tang)} บาท ▼` : 'เท่าเดิม')
+const bokTang = (tang) => (tang > 0 ? `ขึ้น ${ngern(tang)} บาท 🔺` : tang < 0 ? `ลง ${ngern(-tang)} บาท 🔻` : 'เท่าเดิม')
 
 export const embedthong = (raka, kao, wankon) => {
   const tang = kao ? raka.baengKhai - kao.baengKhai : 0
