@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 process.argv.push('--dry')
-const { kadkhao, hatuan, sarupwan, anthong, embedthong, wanthai, mongthai, tad, duchue, linkff, banklum, dupuang, wanroem, habls, duanthi, anlek, thiap, banok, haok, duok, rorbls, faokhao, raitick, raikhao, khaomai, kaeduan, anrss, duduan, hathong, kadsam, songsarup, tampang, khuanbok } = await import('./kao.mjs')
+const { kadkhao, hatuan, sarupwan, anthong, embedthong, wanthai, mongthai, tad, duchue, linkff, banklum, dupuang, wanroem, habls, duanthi, anlek, thiap, banok, haok, duok, rorlek, chuend, wannd, hand, faokhao, raitick, raikhao, khaomai, kaeduan, anrss, duduan, hathong, kadsam, songsarup, tampang, khuanbok } = await import('./kao.mjs')
 
 const now = Date.parse('2026-10-14T12:00:00Z')
 const puang = kadkhao([
@@ -117,24 +117,50 @@ const wanCpi = kadkhao([
 ])
 const lang = Date.parse('2026-10-14T12:35:00Z')
 assert.equal(haok(wanCpi, Date.parse('2026-10-14T12:20:00Z'), {}).length, 0)
-assert.equal(haok(wanCpi, lang, {})[0].sam.length, 1)
+assert.equal(haok(wanCpi, lang, {})[0].sam.length, 2)
 assert.equal(haok(wanCpi, Date.parse('2026-10-14T14:10:00Z'), {}).length, 0)
 const stOk = {}
 let riak = 0
 const blsKao = async () => (riak++, { CUSR0000SA0: [g('334.131', 'M08'), g('332', 'M07')] })
-assert.equal(await duok(stOk, '', lang, wanCpi, blsKao), 0)
+const r = (eventName, actual, consensus, previous = '', gmt = '08:30') => ({ gmt, country: 'United States', eventName, actual, consensus, previous })
+const ndWan = []
+const nd = (rows) => async (w) => (ndWan.push(w), rows)
+const ndYang = nd([r('CPI', '&nbsp;', '0.6%', '0.4%'), r('CPI', '&nbsp;', '3.6%', '3.4%'), r('Retail Sales', '&nbsp;', '0.3%', '1.3%'), r('Retail Sales', '&nbsp;', ' ', '5.56%')])
+const ndOk = nd([r('CPI', '0.6%', '0.6%', '0.4%'), r('CPI', '3.7%', '3.6%', '3.4%'), r('Retail Sales', '0.8%', '0.3%', '1.3%'), r('Retail Sales', '6.29%', ' ', '5.56%')])
+assert.equal(await duok(stOk, '', lang, wanCpi, blsKao, undefined, undefined, ndYang), 0)
 assert.deepEqual(stOk.ok, {})
+assert.equal(ndWan[0], '2026-10-15')
 const blsMai = async () => (riak++, { CUSR0000SA0: [g('336.298'), g('334.131', 'M08')] })
-assert.equal(await duok(stOk, '', lang, wanCpi, blsMai), 1)
+assert.equal(await duok(stOk, '', lang, wanCpi, blsMai, undefined, undefined, ndYang), 0)
+assert.equal(await duok(stOk, '', lang, wanCpi, blsMai, undefined, undefined, ndOk), 1)
 assert.equal(Object.keys(stOk.ok).length, 3)
-assert.equal(await duok(stOk, '', lang + 300_000, wanCpi, blsMai), 0)
-assert.equal(riak, 2)
+assert.equal(await duok(stOk, '', lang + 300_000, wanCpi, blsMai, undefined, undefined, ndOk), 0)
+assert.equal(riak, 3)
+const blsPang = async () => { throw new Error('BLS 500') }
+assert.equal(await duok({}, '', lang, wanCpi, blsPang, undefined, undefined, ndOk), 1)
+const stHai = {}
+assert.equal(await duok(stHai, '', lang, wanCpi.slice(2), blsPang, undefined, undefined, nd([r('Something Else', '1%', '1%')])), 0)
+assert.equal(Object.keys(stHai.ok).length, 1)
+
+const claims = kadkhao([{ title: 'Unemployment Claims', country: 'USD', date: '2026-10-22T08:30:00-04:00', impact: 'Medium', forecast: '200K', previous: '199K' }])[0]
+const wanClaims = [r('Continuing Jobless Claims', '1,728K', '1,720K', '1,703K'), r('Initial Jobless Claims', '194K', '200K', '200K'), r('Jobless Claims 4-Week Avg.', '197.75K', '200.00K', '198.75K')]
+assert.equal(hand(wanClaims, claims).actual, '194K')
+assert.equal(hand(wanClaims.map((x) => ({ ...x, gmt: '10:00' })), claims), undefined)
+assert.equal(hand([r('CPI', '1%', '0.6%'), r('CPI', '2%', '0.6%')], cpi), undefined)
+assert.equal(hand([r('CPI', '3.7%', '3.6%', '3.4%'), r('CPI', '0.6%', '', '0.4%')], cpi).actual, '0.6%')
+assert.equal(wannd('2026-10-31T08:30:00-04:00'), '2026-11-01')
+assert.equal(chuend('Flash Manufacturing PMI'), 's&p global manufacturing pmi')
+assert.equal(chuend('Revised UoM Consumer Sentiment'), 'michigan consumer sentiment')
+assert.equal(chuend('Prelim GDP q/q'), 'gdp')
+assert.equal(chuend('Core PCE Price Index m/m'), 'core pce price index')
+assert.equal(chuend('ISM Manufacturing PMI'), 'ism manufacturing pmi')
+assert.equal(thiap('1,728K', '1,720K'), 1)
 
 const ok830 = Date.parse('2026-10-14T12:30:00Z')
-assert.equal(rorbls(wanCpi, ok830 - 20 * 60_000, {}).length, 0)
-assert.equal(rorbls(wanCpi, ok830 - 10 * 60_000, {}).length, 1)
-assert.equal(rorbls(wanCpi, ok830 + 31 * 60_000, {}).length, 0)
-assert.equal(rorbls(kadkhao([{ title: 'Retail Sales m/m', country: 'USD', date: '2026-10-14T08:30:00-04:00', impact: 'High' }]), ok830, {}).length, 0)
+assert.equal(rorlek(wanCpi, ok830 - 20 * 60_000, {}).length, 0)
+assert.equal(rorlek(wanCpi, ok830 - 10 * 60_000, {}).length, 1)
+assert.equal(rorlek(wanCpi, ok830 + 31 * 60_000, {}).length, 0)
+assert.equal(rorlek(kadkhao([{ title: 'Retail Sales m/m', country: 'USD', date: '2026-10-14T08:30:00-04:00', impact: 'High' }]), ok830, {}).length, 0)
 
 assert.equal(raitick(ok830, ok830 - 60_000), 15_000)
 assert.equal(raitick(ok830, ok830 - 4_000), 4_000)

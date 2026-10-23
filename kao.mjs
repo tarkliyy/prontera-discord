@@ -4,6 +4,7 @@ import config from './config.mjs'
 const KHAO_URL = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json'
 const THONG_URL = 'https://api.chnwt.dev/thai-gold-api/latest'
 const BLS_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/'
+const ND_URL = 'https://api.nasdaq.com/api/calendar/economicevents'
 const DUAN_URL = 'https://investinglive.com/feed/news'
 const PLAE_URL = 'https://api.mymemory.translated.net/get'
 const UA = 'Mozilla/5.0 (compatible; prontera-discord/1.0)'
@@ -266,9 +267,11 @@ export const anlek = (b, data, duan) => {
   return `${ni.calculations?.pct_changes?.['1'] ?? ((a / p - 1) * 100).toFixed(1)}%`
 }
 
+const plaek = (s) => parseFloat(String(s).replaceAll(',', ''))
+
 export const thiap = (ok, kad) => {
-  const a = parseFloat(ok)
-  const f = parseFloat(kad)
+  const a = plaek(ok)
+  const f = plaek(kad)
   return Number.isFinite(a) && Number.isFinite(f) ? Math.sign(a - f) : undefined
 }
 
@@ -288,7 +291,7 @@ export const embedok = ({ title, ts, klum, sam, lek }) => {
     url: linkff(klum[0].date),
     description: `${huawela(ts, 't')}\n\n${sam.map((e, i) => banok(e, lek[i])).join('\n\n')}${uen}\n\n${linkla(linkff(klum[0].date))}`,
     color: config.si.thong,
-    footer: { text: `${TAIKHAO} · ตัวเลขจาก BLS` },
+    footer: { text: `${TAIKHAO} · ตัวเลขจาก BLS / Nasdaq` },
   }
 }
 
@@ -307,32 +310,84 @@ const dungbls = async (ids, pi) => {
   return Object.fromEntries(j.Results.series.map((x) => [x.seriesID, x.data]))
 }
 
+const PRATHET = { USD: 'United States', EUR: 'Euro Zone', GBP: 'United Kingdom', JPY: 'Japan', CNY: 'China', CAD: 'Canada', AUD: 'Australia', NZD: 'New Zealand', CHF: 'Switzerland' }
+const CHUE_ND = [
+  [/^Unemployment Claims$/i, 'Initial Jobless Claims'],
+  [/^Non-Farm Employment Change$/i, 'Nonfarm Payrolls'],
+  [/^ADP Non-Farm Employment Change$/i, 'ADP Nonfarm Employment Change'],
+  [/UoM Consumer Sentiment$/i, 'Michigan Consumer Sentiment'],
+  [/UoM Inflation Expectations$/i, 'Michigan 1-Year Inflation Expectations'],
+  [/^(Flash |Final )?Manufacturing PMI$/i, 'S&P Global Manufacturing PMI'],
+  [/^(Flash |Final )?Services PMI$/i, 'S&P Global Services PMI'],
+  [/^ISM Services PMI$/i, 'ISM Non-Manufacturing PMI'],
+  [/^Federal Funds Rate$/i, 'Fed Interest Rate Decision'],
+  [/^Philly Fed Manufacturing Index$/i, 'Philadelphia Fed Manufacturing Index'],
+  [/^Empire State Manufacturing Index$/i, 'NY Empire State Manufacturing Index'],
+  [/^Import Prices/i, 'Import Price Index'],
+]
+
+export const chuend = (title) =>
+  (CHUE_ND.find(([re]) => re.test(title))?.[1] ?? title.replace(/^(Flash|Final|Prelim|Revised|Advance) | [mqy]\/[mqy]$/gi, '')).trim().toLowerCase()
+
+export const wannd = (date) => new Date(Date.parse(date.slice(0, 10)) + 24 * 60 * NATHI).toISOString().slice(0, 10)
+
+const hang = (r, e) => {
+  const h = Math.abs(plaek(r.consensus) - plaek(e.forecast))
+  const hp = Math.abs(plaek(r.previous) - plaek(e.previous))
+  return Number.isFinite(h) ? h : Number.isFinite(hp) ? hp : Infinity
+}
+
+export const hand = (rows = [], e) => {
+  const chue = chuend(e.title)
+  const dai = rows.filter((r) => r.country === PRATHET[e.country] && r.gmt === e.date.slice(11, 16) && r.eventName.trim().toLowerCase() === chue)
+  if (dai.length < 2) return dai[0]
+  const [a, b] = dai.map((r) => [hang(r, e), r]).sort((x, y) => x[0] - y[0])
+  return a[0] < b[0] ? a[1] : undefined
+}
+
+const lekjing = (r) => r?.actual.replaceAll('&nbsp;', '').trim()
+
+const dungnd = async (wan) => {
+  const r = await fetch(`${ND_URL}?date=${wan}`, { headers: { 'user-agent': UA, accept: 'application/json' }, signal: AbortSignal.timeout(15_000) })
+  if (!r.ok) throw new Error(`nasdaq -> ${r.status}`)
+  const rows = (await r.json())?.data?.rows
+  if (!Array.isArray(rows)) throw new Error('nasdaq ตอบไม่มี rows')
+  return rows
+}
+
+const milek = (e) => Boolean(habls(e) || e.forecast || e.previous)
+
 export const haok = (puang, now, oklaew, nan = OK_NAN) =>
   [...jubklum(puang.filter((e) => e.ts <= now && e.ts > now - nan && !oklaew[e.key]))]
-    .map(([ts, klum]) => ({ ts, klum, sam: kadsam(klum).filter(habls) }))
+    .map(([ts, klum]) => ({ ts, klum, sam: kadsam(klum).filter(milek) }))
     .filter((k) => k.sam.length)
 
-export const duok = async (state, hook, now, puang, dueng = dungbls, title = '✅ ตัวเลขออกแล้ว', nan = OK_NAN) => {
+export const duok = async (state, hook, now, puang, dueng = dungbls, title = '✅ ตัวเลขออกแล้ว', nan = OK_NAN, duengnd = dungnd) => {
   state.ok ??= {}
   const ror = haok(puang, now, state.ok, nan)
   if (!ror.length) return 0
-  const ids = [...new Set(ror.flatMap((k) => k.sam.map((e) => habls(e).id)))]
-  const data = await dueng(ids, new Date(now).getUTCFullYear())
+  const ids = [...new Set(ror.flatMap((k) => k.sam.filter(habls).map((e) => habls(e).id)))]
+  const data = ids.length ? await dueng(ids, new Date(now).getUTCFullYear()).catch((e) => (console.error('BLS พัง ใช้ Nasdaq แทน:', e.message), {})) : {}
+  const wan = [...new Set(ror.flatMap((k) => k.sam.map((e) => wannd(e.date))))]
+  const nd = Object.fromEntries(await Promise.all(wan.map(async (w) => [w, await duengnd(w)])))
   let song = 0
   for (const k of ror) {
-    const lek = k.sam.map((e) => anlek(habls(e), data[habls(e).id] ?? [], duanthi(e.date)))
+    const sam = k.sam.filter((e) => habls(e) || hand(nd[wannd(e.date)], e))
+    const lek = sam.map((e) => (habls(e) && anlek(habls(e), data[habls(e).id] ?? [], duanthi(e.date))) || lekjing(hand(nd[wannd(e.date)], e)))
     if (lek.some((l) => !l)) continue
-    await sendka(hook, embedok({ title, ...k, lek }))
+    if (sam.length) {
+      await sendka(hook, embedok({ title, ...k, sam, lek }))
+      song++
+    } else console.error('หาตัวเลขใน Nasdaq ไม่เจอ:', k.sam.map((e) => e.title).join(', '))
     for (const e of k.klum) state.ok[e.key] = e.ts
-    song++
   }
   for (const [key, ts] of Object.entries(state.ok)) if (ts < now - KEP_TUAN) delete state.ok[key]
   return song
 }
 
-export const rorbls = (puang, now, oklaew) =>
+export const rorlek = (puang, now, oklaew) =>
   [...jubklum(puang.filter((e) => e.ts > now - FAO_LANG && e.ts <= now + FAO_KON && !oklaew[e.key]))].filter(([, klum]) =>
-    kadsam(klum).some(habls),
+    kadsam(klum).some(milek),
   )
 
 export const raitick = (raek, now) => (raek > now ? Math.min(raek - now, FAO_TICK) : now - raek < FAO_REO_NAN ? FAO_REO : FAO_TICK)
@@ -342,7 +397,7 @@ export const faokhao = async (state, { ropni, duokni, gep = async () => {}, non:
   let ropLasud = roem
   let pang = false
   while (wela() - roem < FAO_MAX) {
-    const ror = rorbls(state.khao?.puang ?? [], wela(), state.ok ?? {})
+    const ror = rorlek(state.khao?.puang ?? [], wela(), state.ok ?? {})
     if (!ror.length) break
     await rorni(raitick(Math.min(...ror.map(([ts]) => ts)), wela()))
     const now = wela()
@@ -660,7 +715,7 @@ else if (import.meta.main) {
   const state = await luang()
   await ropni(state, Date.now())
   await gep(state)
-  if (hook.khao && !dry && rorbls(state.khao?.puang ?? [], Date.now(), state.ok ?? {}).length) {
+  if (hook.khao && !dry && rorlek(state.khao?.puang ?? [], Date.now(), state.ok ?? {}).length) {
     console.log('มีข่าวใกล้ออก เข้าโหมดเฝ้าข่าว')
     const duokni = (st, now) => duok(st, hook.khao, now, st.khao?.puang ?? [])
     await faokhao(state, { ropni, duokni, gep })
